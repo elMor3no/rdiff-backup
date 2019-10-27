@@ -89,27 +89,13 @@ class Map:
         """Initialize, user is true for users, false for groups"""
         self.name2id = (is_user and uname2uid) or gname2gid
 
-    def __call__(self, id, name=None):
-        """Return mapped id from id and, if available, name"""
-        if not name:
-            return id
-        newid = self.name2id(name)
-        if newid is None:
-            return id
-        else:
-            return newid
 
-    def map_acl(self, id, name=None):
-        """Like get_id, but use this for ACLs.  Return id or None
 
 		Unlike ordinary user/group ownership, ACLs are not required
 		and can be dropped.  If we cannot map the name over, return
 		None.
 
 		"""
-        if not name:
-            return id
-        return self.name2id(name)
 
 
 class DefinedMap(Map):
@@ -128,58 +114,7 @@ class DefinedMap(Map):
 		mapping unless user is false, then do group.
 
 		"""
-        Map.__init__(self, is_user)
-        self.name_mapping_dict = {}
-        self.id_mapping_dict = {}
 
-        for line in mapping_string.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            comps = line.split(':')
-            if not len(comps) == 2:
-                log.Log.FatalError("Error parsing mapping file, bad line: " +
-                                   line)
-            old, new = comps
-
-            try:
-                self.id_mapping_dict[int(old)] = self.init_get_new_id(new)
-            except ValueError:
-                self.name_mapping_dict[old] = self.init_get_new_id(new)
-
-    def init_get_new_id(self, id_or_name):
-        """Return id of id_or_name, failing if cannot.  Used in __init__"""
-        try:
-            return int(id_or_name)
-        except ValueError:
-            try:
-                return self.name2id(id_or_name)
-            except KeyError:
-                log.Log.FatalError("Cannot get id for user or group name " +
-                                   id_or_name)
-
-    def __call__(self, id, name=None):
-        """Return new id given old id and name"""
-        newid = self.map_acl(id, name)
-        if newid is None:
-            return id
-        else:
-            return newid
-
-    def map_acl(self, id, name=None):
-        """Return new id or None given old and name (used for ACLs)"""
-        if name:
-            try:
-                return self.name_mapping_dict[name]
-            except KeyError:
-                pass
-            newid = self.name2id(name)
-            if newid is not None:
-                return newid
-        try:
-            return self.id_mapping_dict[id]
-        except KeyError:
-            return None
 
 
 class NumericalMap:
@@ -228,13 +163,7 @@ def init_user_mapping(mapping_string=None, numerical_ids=None):
 	argument is None, default to preserving uname where possible.
 
 	"""
-    global UserMap
-    if numerical_ids:
-        UserMap = NumericalMap()
-    elif mapping_string:
-        UserMap = DefinedMap(1, mapping_string)
-    else:
-        UserMap = Map(1)
+
 
 
 def init_group_mapping(mapping_string=None, numerical_ids=None):
@@ -244,13 +173,7 @@ def init_group_mapping(mapping_string=None, numerical_ids=None):
 	argument is None, default to preserving gname where possible.
 
 	"""
-    global GroupMap
-    if numerical_ids:
-        GroupMap = NumericalMap()
-    elif mapping_string:
-        GroupMap = DefinedMap(0, mapping_string)
-    else:
-        GroupMap = Map(0)
+
 
 
 def map_rpath(rp):

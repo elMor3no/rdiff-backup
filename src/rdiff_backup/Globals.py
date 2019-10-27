@@ -18,8 +18,6 @@
 # USA
 """Hold a variety of constants usually set at initialization."""
 
-import re
-import os
 
 # The current version of rdiff-backup
 version = "1.3.4"
@@ -282,52 +280,6 @@ def set_local(name, val):
 
 
 def set_integer(name, val):
-    """Like set, but make sure val is an integer"""
-    try:
-        intval = int(val)
-    except ValueError:
-        Log.FatalError("Variable %s must be set to an integer -\n"
-                       "received %s instead." % (name, val))
-    set(name, intval)
-
-
-def set_float(name, val, min=None, max=None, inclusive=1):
-    """Like set, but make sure val is float within given bounds"""
-
-    def error():
-        s = "Variable %s must be set to a float" % (name, )
-        if min is not None and max is not None:
-            s += " between %s and %s " % (min, max)
-            if inclusive:
-                s += "inclusive"
-            else:
-                s += "not inclusive"
-        elif min is not None or max is not None:
-            if inclusive:
-                inclusive_string = "or equal to "
-            else:
-                inclusive_string = ""
-            if min is not None:
-                s += " greater than %s%s" % (inclusive_string, min)
-            else:
-                s += " less than %s%s" % (inclusive_string, max)
-        Log.FatalError(s)
-
-    try:
-        f = float(val)
-    except ValueError:
-        error()
-    if min is not None:
-        if inclusive and f < min:
-            error()
-        elif not inclusive and f <= min:
-            error()
-    if max is not None:
-        if inclusive and f > max:
-            error()
-        elif not inclusive and f >= max:
-            error()
-    set(name, f)
 
 
 def get_dict_val(name, key):
@@ -346,9 +298,4 @@ def postset_regexp(name, re_string, flags=None):
         conn.Globals.postset_regexp_local(name, re_string, flags)
 
 
-def postset_regexp_local(name, re_string, flags):
-    """Set name to compiled re_string locally"""
-    if flags:
-        globals()[name] = re.compile(re_string, flags)
-    else:
-        globals()[name] = re.compile(re_string)
+

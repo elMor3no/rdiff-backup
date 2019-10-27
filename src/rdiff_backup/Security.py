@@ -86,76 +86,6 @@ def set_security_level(action, cmdpairs):
 
 	"""
 
-    def islocal(cmdpair):
-        return not cmdpair[0]
-
-    def bothlocal(cp1, cp2):
-        return islocal(cp1) and islocal(cp2)
-
-    def bothremote(cp1, cp2):
-        return not islocal(cp1) and not islocal(cp2)
-
-    def getpath(cmdpair):
-        return cmdpair[1]
-
-    if Globals.server: return
-    cp1 = cmdpairs[0]
-    if len(cmdpairs) > 1: cp2 = cmdpairs[1]
-    else:
-        cp2 = cp1
-
-    if action == "backup" or action == "check-destination-dir":
-        if bothlocal(cp1, cp2) or bothremote(cp1, cp2):
-            sec_level = "minimal"
-            rdir = tempfile.gettempdir()
-        elif islocal(cp1):
-            sec_level = "read-only"
-            rdir = getpath(cp1)
-        else:
-            assert islocal(cp2)
-            sec_level = "update-only"
-            rdir = getpath(cp2)
-    elif action == "restore" or action == "restore-as-of":
-        if len(cmdpairs) == 1 or bothlocal(cp1, cp2) or bothremote(cp1, cp2):
-            sec_level = "minimal"
-            rdir = tempfile.gettempdir()
-        elif islocal(cp1):
-            sec_level = "read-only"
-            Main.restore_set_root(
-                rpath.RPath(Globals.local_connection, getpath(cp1)))
-            if Main.restore_root: rdir = Main.restore_root.path
-            else:
-                log.Log.FatalError("Invalid restore directory")
-        else:
-            assert islocal(cp2)
-            sec_level = "all"
-            rdir = getpath(cp2)
-    elif action == "mirror":
-        if bothlocal(cp1, cp2) or bothremote(cp1, cp2):
-            sec_level = "minimal"
-            rdir = tempfile.gettempdir()
-        elif islocal(cp1):
-            sec_level = "read-only"
-            rdir = getpath(cp1)
-        else:
-            assert islocal(cp2)
-            sec_level = "all"
-            rdir = getpath(cp2)
-    elif action in [
-            "test-server", "list-increments", 'list-increment-sizes',
-            "list-at-time", "list-changed-since", "calculate-average",
-            "remove-older-than", "compare", "compare-hash", "compare-full",
-            "verify"
-    ]:
-        sec_level = "minimal"
-        rdir = tempfile.gettempdir()
-    else:
-        assert 0, "Unknown action %s" % action
-
-    Globals.security_level = sec_level
-    Globals.restrict_path = rpath.RPath(Globals.local_connection,
-                                        rdir).normalize().path
-
 
 def set_allowed_requests(sec_level):
     """Set the allowed requests list using the security level"""
@@ -244,22 +174,7 @@ def raise_violation(reason, request, arglist):
 
 
 def vet_request(request, arglist):
-    """Examine request for security violations"""
-    #if Globals.server: sys.stderr.write(str(request) + "\n")
-    security_level = Globals.security_level
-    if security_level == "override":
-        return
-    if Globals.restrict_path:
-        for arg in arglist:
-            if isinstance(arg, rpath.RPath): _vet_rpath(arg, request, arglist)
-        if request.function_string in file_requests:
-            vet_filename(request, arglist)
-    if request.function_string in allowed_requests:
-        return
-    if request.function_string in ("Globals.set", "Globals.set_local"):
-        if arglist[0] not in disallowed_server_globals:
-            return
-    raise_violation("Invalid request", request, arglist)
+
 
 
 def vet_filename(request, arglist):
@@ -278,17 +193,4 @@ def vet_filename(request, arglist):
 
 
 def _vet_rpath(rp, request, arglist):
-    """Internal function to validate that a specific path isn't restricted"""
-    if Globals.restrict_path and rp.conn is Globals.local_connection:
-        normalized, restrict = rp.normalize().path, Globals.restrict_path
-        if restrict == b"/":
-            return
-        components = normalized.split(b"/")
-        # 3 cases for restricted dir /usr/foo:  /var, /usr/foobar, /usr/foo/..
-        if (not normalized.startswith(restrict)
-                or (len(normalized) > len(restrict)
-                    and normalized[len(restrict)] != ord("/"))
-                or b".." in components):
-            raise_violation(
-                "Normalized path %s not within restricted path %s" %
-                (normalized, restrict), request, arglist)
+

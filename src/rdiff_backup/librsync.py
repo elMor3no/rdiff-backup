@@ -43,76 +43,7 @@ class librsyncError(Exception):
 
 
 class LikeFile:
-    """File-like object used by SigFile, DeltaFile, and PatchFile"""
-    mode = "rb"
 
-    # This will be replaced in subclasses by an object with
-    # appropriate cycle() method
-    maker = None
-
-    def __init__(self, infile, need_seek=None):
-        """LikeFile initializer - zero buffers, set eofs off"""
-        self.check_file(infile, need_seek)
-        self.infile = infile
-        self.closed = self.infile_closed = None
-        self.inbuf = b""
-        self.outbuf = array.array('b')
-        self.eof = self.infile_eof = None
-
-    def check_file(self, file, need_seek=None):
-        """Raise type error if file doesn't have necessary attributes"""
-        if not hasattr(file, "read"):
-            raise TypeError("Basis file must have a read() method")
-        if not hasattr(file, "close"):
-            raise TypeError("Basis file must have a close() method")
-        if need_seek and not hasattr(file, "seek"):
-            raise TypeError("Basis file must have a seek() method")
-
-    def read(self, length=-1):
-        """Build up self.outbuf, return first length bytes"""
-        if length == -1:
-            while not self.eof:
-                self._add_to_outbuf_once()
-            real_len = len(self.outbuf)
-        else:
-            while not self.eof and len(self.outbuf) < length:
-                self._add_to_outbuf_once()
-            real_len = min(length, len(self.outbuf))
-
-        return_val = self.outbuf[:real_len].tobytes()
-        del self.outbuf[:real_len]
-        return return_val
-
-    def _add_to_outbuf_once(self):
-        """Add one cycle's worth of output to self.outbuf"""
-        if not self.infile_eof:
-            self._add_to_inbuf()
-        try:
-            self.eof, len_inbuf_read, cycle_out = self.maker.cycle(self.inbuf)
-        except _librsync.librsyncError as e:
-            raise librsyncError(str(e))
-        self.inbuf = self.inbuf[len_inbuf_read:]
-        self.outbuf.frombytes(cycle_out)
-
-    def _add_to_inbuf(self):
-        """Make sure len(self.inbuf) >= blocksize"""
-        assert not self.infile_eof
-        while len(self.inbuf) < blocksize:
-            new_in = self.infile.read(blocksize)
-            if not new_in:
-                self.infile_eof = 1
-                self.infile_closeval = self.infile.close()
-                self.infile_closed = 1
-                break
-            self.inbuf += new_in
-
-    def close(self):
-        """Close infile and pass on infile close value"""
-        self.closed = 1
-        if self.infile_closed:
-            return self.infile_closeval
-        else:
-            return self.infile.close()
 
 
 class SigFile(LikeFile):
@@ -143,17 +74,7 @@ class DeltaFile(LikeFile):
 		close() methods.  It will be closed when self is closed.
 
 		"""
-        LikeFile.__init__(self, new_file)
-        if type(signature) is bytes:
-            sig_string = signature
-        else:
-            self.check_file(signature)
-            sig_string = signature.read()
-            assert not signature.close()
-        try:
-            self.maker = _librsync.new_deltamaker(sig_string)
-        except _librsync.librsyncError as e:
-            raise librsyncError(str(e))
+
 
 
 class PatchedFile(LikeFile):

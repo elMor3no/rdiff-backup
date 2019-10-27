@@ -31,24 +31,6 @@ def check_common_error(error_handler, function, args=[]):
 	certain exceptions which seems innocent enough.
 
 	"""
-    try:
-        return function(*args)
-    except (Exception, KeyboardInterrupt, SystemExit) as exc:
-        TracebackArchive.add([function] + list(args))
-        if catch_error(exc):
-            log.Log.exception()
-            conn = Globals.backup_writer
-            if conn is not None:
-                conn.statistics.record_error()
-            if error_handler:
-                return error_handler(exc, *args)
-            else:
-                return None
-        if is_routine_fatal(exc):
-            log.Log.exception(1, 6)
-        else:
-            log.Log.exception(1, 2)
-        raise
 
 
 def catch_error(exc):

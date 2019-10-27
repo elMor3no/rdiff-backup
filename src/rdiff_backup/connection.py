@@ -28,35 +28,11 @@ import socket
 import sys
 import gzip
 
+
 # The following EA and ACL modules may be used if available
-try:
-    import xattr
-except ImportError:
-    pass
-try:
-    import posix1e
-except ImportError:
-    pass
-try:
-    import win32security
-except ImportError:
-    pass
 
 
-class ConnectionError(Exception):
-    pass
 
-
-class ConnectionReadError(ConnectionError):
-    pass
-
-
-class ConnectionWriteError(ConnectionError):
-    pass
-
-
-class ConnectionQuit(Exception):
-    pass
 
 
 class Connection:
@@ -87,45 +63,23 @@ class LocalConnection(Connection):
 
 	"""
 
-    def __init__(self):
-        """This prevents two instances of LocalConnection"""
-        assert not Globals.local_connection
-        self.conn_number = 0  # changed by SetConnections for server
 
-    def __getattr__(self, name):
-        if name in globals():
-            return globals()[name]
-        elif isinstance(__builtins__, dict):
-            return __builtins__[name]
-        else:
-            return __builtins__.__dict__[name]
 
-    def __setattr__(self, name, value):
-        globals()[name] = value
 
-    def __delattr__(self, name):
-        del globals()[name]
 
-    def __str__(self):
-        return "LocalConnection"
 
-    def reval(self, function_string, *args):
-        return eval(function_string)(*args)
 
-    def quit(self):
-        pass
+
+
+
+
+
 
 
 class ConnectionRequest:
-    """Simple wrapper around a PipeConnection request"""
 
-    def __init__(self, function_string, num_args):
-        self.function_string = function_string
-        self.num_args = num_args
 
-    def __str__(self):
-        return "ConnectionRequest: %s with %d arguments" % \
-            (self.function_string, self.num_args)
+
 
 
 class LowLevelPipeConnection(Connection):
@@ -163,49 +117,7 @@ class LowLevelPipeConnection(Connection):
 		being executed on the other side of the connection.
 
 		"""
-        return "LowLevelPipeConnection"
 
-    def _put(self, obj, req_num):
-        """Put an object into the pipe (will send raw if string)"""
-        log.Log.conn("sending", obj, req_num)
-        if type(obj) is bytes:
-            self._putbuf(obj, req_num)
-        elif isinstance(obj, connection.Connection):
-            self._putconn(obj, req_num)
-        elif isinstance(obj, FilenameMapping.QuotedRPath):
-            self._putqrpath(obj, req_num)
-        elif isinstance(obj, rpath.RPath):
-            self._putrpath(obj, req_num)
-        elif isinstance(obj, rpath.RORPath):
-            self._putrorpath(obj, req_num)
-        elif ((hasattr(obj, "read") or hasattr(obj, "write"))
-              and hasattr(obj, "close")):
-            self._putfile(obj, req_num)
-        elif hasattr(obj, "__next__") and hasattr(obj, "__iter__"):
-            self._putiter(obj, req_num)
-        else:
-            self._putobj(obj, req_num)
-
-    def _putobj(self, obj, req_num):
-        """Send a generic python obj down the outpipe"""
-        self._write("o", pickle.dumps(obj, 1), req_num)
-
-    def _putbuf(self, buf, req_num):
-        """Send buffer buf down the outpipe"""
-        self._write("b", buf, req_num)
-
-    def _putfile(self, fp, req_num):
-        """Send a file to the client using virtual files"""
-        self._write("f", self._i2b(VirtualFile.new(fp)), req_num)
-
-    def _putiter(self, iterator, req_num):
-        """Put an iterator through the pipe"""
-        self._write(
-            "i", self._i2b(VirtualFile.new(iterfile.MiscIterToFile(iterator))),
-            req_num)
-
-    def _putrpath(self, rpath, req_num):
-        """Put an rpath into the pipe
 
 		The rpath's connection will be encoded as its conn_number.  It
 		and the other information is put in a tuple.
@@ -238,99 +150,7 @@ class LowLevelPipeConnection(Connection):
 		string form) of its connection number it is *connected to*.
 
 		"""
-        self._write("c", self._i2b(pipeconn.conn_number), req_num)
 
-    def _putquit(self):
-        """Send a string that takes down server"""
-        self._write("q", b"", 255)
-
-    def _write(self, headerchar, data, req_num):
-        """Write header and then data to the pipe"""
-        assert len(headerchar) == 1, \
-         "Header type %s can only have one letter/byte" % headerchar
-        if isinstance(headerchar, str):  # it can only be an ASCII character
-            headerchar = headerchar.encode('ascii')
-        try:
-            self.outpipe.write(headerchar + self._i2b(req_num, 1) +
-                               self._i2b(len(data), 7))
-            self.outpipe.write(data)
-            self.outpipe.flush()
-        except (IOError, AttributeError):
-            raise ConnectionWriteError()
-
-    def _read(self, length):
-        """Read length bytes from inpipe, returning result"""
-        try:
-            return self.inpipe.read(length)
-        except IOError:
-            raise ConnectionReadError()
-
-    def _b2i(self, b):
-        """Convert bytes to int using big endian byteorder"""
-        return int.from_bytes(b, byteorder='big')
-
-    def _i2b(self, i, size=0):
-        """Convert int to string using big endian byteorder"""
-        if (size == 0):
-            size = (i.bit_length() + 7) // 8
-        return i.to_bytes(size, byteorder='big')
-
-    def _get(self):
-        """Read an object from the pipe and return (req_num, value)"""
-        header_string = self.inpipe.read(9)
-        if not len(header_string) == 9:
-            raise ConnectionReadError("Truncated header string (problem "
-                                      "probably originated remotely)")
-        format_string = header_string[0:1]
-        req_num = self._b2i(header_string[1:2])
-        length = self._b2i(header_string[2:])
-
-        if format_string == b"q":
-            raise ConnectionQuit("Received quit signal")
-
-        data = self._read(length)
-        if format_string == b"o":
-            result = pickle.loads(data)
-        elif format_string == b"b":
-            result = data
-        elif format_string == b"f":
-            result = VirtualFile(self, self._b2i(data))
-        elif format_string == b"i":
-            result = iterfile.FileToMiscIter(
-                VirtualFile(self, self._b2i(data)))
-        elif format_string == b"r":
-            result = self._getrorpath(data)
-        elif format_string == b"R":
-            result = self._getrpath(data)
-        elif format_string == b"Q":
-            result = self._getqrpath(data)
-        else:
-            assert format_string == b"c", header_string
-            result = Globals.connection_dict[self._b2i(data)]
-        log.Log.conn("received", result, req_num)
-        return (req_num, result)
-
-    def _getrorpath(self, raw_rorpath_buf):
-        """Reconstruct RORPath object from raw data"""
-        index, data = pickle.loads(raw_rorpath_buf)
-        return rpath.RORPath(index, data)
-
-    def _getrpath(self, raw_rpath_buf):
-        """Return RPath object indicated by raw_rpath_buf"""
-        conn_number, base, index, data = pickle.loads(raw_rpath_buf)
-        return rpath.RPath(Globals.connection_dict[conn_number], base, index,
-                           data)
-
-    def _getqrpath(self, raw_qrpath_buf):
-        """Return QuotedRPath object from raw buffer"""
-        conn_number, base, index, data = pickle.loads(raw_qrpath_buf)
-        return FilenameMapping.QuotedRPath(
-            Globals.connection_dict[conn_number], base, index, data)
-
-    def _close(self):
-        """Close the pipes associated with the connection"""
-        self.outpipe.close()
-        self.inpipe.close()
 
 
 class PipeConnection(LowLevelPipeConnection):
@@ -476,22 +296,11 @@ class RedirectedConnection(Connection):
 		default shouldn't have to be changed.
 
 		"""
-        self.conn_number = conn_number
-        self.routing_number = routing_number
-        self.routing_conn = Globals.connection_dict[routing_number]
 
-    def reval(self, function_string, *args):
-        """Evalution function_string on args on remote connection"""
-        return self.routing_conn.reval("RedirectedRun", self.conn_number,
-                                       function_string, *args)
 
-    def __str__(self):
-        return "RedirectedConnection %d,%d" % (self.conn_number,
-                                               self.routing_number)
 
-    def __getattr__(self, name):
-        return EmulateCallableRedirected(self.conn_number, self.routing_conn,
-                                         name)
+
+
 
 
 def RedirectedRun(conn_number, func, *args):
@@ -547,73 +356,33 @@ class VirtualFile:
 	with a unique file number.
 
 	"""
-    #### The following are used by the server
-    vfiles = {}
-    counter = 0
 
-    def getbyid(cls, id):
-        return cls.vfiles[id]
 
-    getbyid = classmethod(getbyid)
 
-    def readfromid(cls, id, length):
-        if length is None:
-            return cls.vfiles[id].read()
-        else:
-            return cls.vfiles[id].read(length)
 
-    readfromid = classmethod(readfromid)
 
-    def readlinefromid(cls, id):
-        return cls.vfiles[id].readline()
 
-    readlinefromid = classmethod(readlinefromid)
 
-    def writetoid(cls, id, buffer):
-        return cls.vfiles[id].write(buffer)
 
-    writetoid = classmethod(writetoid)
 
-    def closebyid(cls, id):
-        fp = cls.vfiles[id]
-        del cls.vfiles[id]
-        return fp.close()
 
-    closebyid = classmethod(closebyid)
 
-    def new(cls, fileobj):
-        """Associate a new VirtualFile with a read fileobject, return id"""
-        count = cls.counter
-        cls.vfiles[count] = fileobj
-        cls.counter = count + 1
-        return count
 
-    new = classmethod(new)
 
-    #### And these are used by the client
-    def __init__(self, connection, id):
-        self.connection = connection
-        self.id = id
 
-    def read(self, length=None):
-        return self.connection.VirtualFile.readfromid(self.id, length)
 
-    def readline(self):
-        return self.connection.VirtualFile.readlinefromid(self.id)
 
-    def write(self, buf):
-        return self.connection.VirtualFile.writetoid(self.id, buf)
 
-    def close(self):
-        return self.connection.VirtualFile.closebyid(self.id)
 
-    def __iter__(self):
-        """Iterates lines in file, like normal iter(file) behavior"""
-        while 1:
-            line = self.readline()
-            if not line:
-                break
-            yield line
+
+
+
+
+
+
+
+
+
 
 
 # everything has to be available here for remote connection's use, but

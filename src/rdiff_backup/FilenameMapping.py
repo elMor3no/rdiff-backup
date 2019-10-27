@@ -28,9 +28,7 @@ handle that error.)
 
 """
 
-import os
-import re
-import types
+
 from . import Globals, log, rpath
 
 # If true, enable character quoting, and set characters making
@@ -166,36 +164,6 @@ class QuotedRPath(rpath.RPath):
 		correctly and append()ed to the currect QuotedRPath.
 
 		"""
-        return list(map(unquote, self.conn.os.listdir(self.path)))
-
-    def isincfile(self):
-        """Return true if path indicates increment, sets various variables"""
-        if not self.index:  # consider the last component as quoted
-            dirname, basename = self.dirsplit()
-            temp_rp = rpath.RPath(self.conn, dirname, (unquote(basename), ))
-            result = temp_rp.isincfile()
-            if result:
-                self.inc_basestr = unquote(temp_rp.inc_basestr)
-                self.inc_timestr = unquote(temp_rp.inc_timestr)
-        else:
-            result = rpath.RPath.isincfile(self)
-            if result:
-                self.inc_basestr = unquote(self.inc_basestr)
-        return result
-
-    def get_path(self):
-        """Just a getter to return the path unquoted"""
-        return unquote(self.path)
-
-
-def get_quotedrpath(rp, separate_basename=0):
-    """Return quoted version of rpath rp"""
-    assert not rp.index  # Why would we starting quoting "in the middle"?
-    if separate_basename:
-        dirname, basename = rp.dirsplit()
-        return QuotedRPath(rp.conn, dirname, (unquote(basename), ), rp.data)
-    else:
-        return QuotedRPath(rp.conn, rp.base, (), rp.data)
 
 
 def get_quoted_sep_base(filename):

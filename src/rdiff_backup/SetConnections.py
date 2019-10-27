@@ -52,49 +52,12 @@ def get_cmd_pairs(arglist, remote_schema=None, remote_cmd=None):
 	None iff it describes a local path, and cmdpair[1] is the path.
 
 	"""
-    global __cmd_schema
-    if remote_schema:
-        __cmd_schema = remote_schema
-    elif not Globals.ssh_compression:
-        __cmd_schema = __cmd_schema_no_compress
-
-    if Globals.remote_tempdir:
-        __cmd_schema += (b" --tempdir=" + Globals.remote_tempdir)
-
-    if not arglist:
-        return []
-    desc_pairs = list(map(parse_file_desc, arglist))
-
-    if [x for x in desc_pairs if x[0]]:  # True if any host_info found
-        if remote_cmd:
-            Log.FatalError("The --remote-cmd flag is not compatible "
-                           "with remote file descriptions.")
-    elif remote_schema:
-        Log("Remote schema option ignored - no remote file "
-            "descriptions.", 2)
-    cmdpairs = list(map(desc2cmd_pairs, desc_pairs))
-    if remote_cmd:  # last file description gets remote_cmd
-        cmd_pairs[-1] = (remote_cmd, cmd_pairs[-1][1])
-    return cmdpairs
 
 
 def cmdpair2rp(cmd_pair):
-    """Return normalized RPath from cmd_pair (remote_cmd, filename)"""
-    cmd, filename = cmd_pair
-    if cmd:
-        conn = init_connection(cmd)
-    else:
-        conn = Globals.local_connection
-    return rpath.RPath(conn, filename).normalize()
 
 
 def desc2cmd_pairs(desc_pair):
-    """Return pair (remote_cmd, filename) from desc_pair"""
-    host_info, filename = desc_pair
-    if not host_info:
-        return (None, filename)
-    else:
-        return (fill_schema(host_info), filename)
 
 
 def parse_file_desc(file_desc):
@@ -153,28 +116,6 @@ def init_connection(remote_cmd):
 	like global settings, its connection number, and verbosity.
 
 	"""
-    if not remote_cmd:
-        return Globals.local_connection
-
-    Log("Executing %a" % remote_cmd, 4)
-    try:
-        process = subprocess.Popen(
-            remote_cmd,
-            shell=True,
-            bufsize=0,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE)
-        (stdin, stdout) = (process.stdin, process.stdout)
-    except OSError:
-        (stdin, stdout) = (None, None)
-    conn_number = len(Globals.connections)
-    conn = connection.PipeConnection(stdout, stdin, conn_number)
-
-    check_connection_version(conn, remote_cmd)
-    Log("Registering connection %d" % conn_number, 7)
-    init_connection_routing(conn, conn_number, remote_cmd)
-    init_connection_settings(conn)
-    return conn
 
 
 def check_connection_version(conn, remote_cmd):
@@ -215,16 +156,9 @@ which should only print out the text: rdiff-backup <version>""" %
 
 
 def init_connection_routing(conn, conn_number, remote_cmd):
-    """Called by init_connection, establish routing, conn dict"""
-    Globals.connection_dict[conn_number] = conn
 
-    conn.SetConnections.init_connection_remote(conn_number)
-    for other_remote_conn in Globals.connections[1:]:
-        conn.SetConnections.add_redirected_conn(other_remote_conn.conn_number)
-        other_remote_conn.SetConnections.add_redirected_conn(conn_number)
 
-    Globals.connections.append(conn)
-    __conn_remote_cmds.append(remote_cmd)
+
 
 
 def init_connection_settings(conn):
@@ -275,13 +209,6 @@ def CloseConnections():
 
 
 def TestConnections(rpaths):
-    """Test connections, printing results"""
-    if len(Globals.connections) == 1:
-        print("No remote connections specified")
-    else:
-        assert len(Globals.connections) == len(rpaths) + 1
-        for i in range(1, len(Globals.connections)):
-            test_connection(i, rpaths[i - 1])
 
 
 def test_connection(conn_number, rp):

@@ -22,14 +22,6 @@ import os
 from . import Globals, log, TempFile, rpath, hash, librsync
 
 
-def get_signature(rp, blocksize=None):
-    """Take signature of rpin file and return in file object"""
-    if not blocksize:
-        blocksize = find_blocksize(rp.getsize())
-    log.Log(
-        "Getting signature of %s with blocksize %s" % (rp.get_safeindexpath(),
-                                                       blocksize), 7)
-    return librsync.SigFile(rp.open("rb"), blocksize)
 
 
 def find_blocksize(file_len):
@@ -103,26 +95,4 @@ def patch_local(rp_basis, rp_delta, outrp=None, delta_compressed=None):
 	used to produce hashes.
 
 	"""
-    assert rp_basis.conn is Globals.local_connection
-    if delta_compressed:
-        deltafile = rp_delta.open("rb", 1)
-    else:
-        deltafile = rp_delta.open("rb")
-    patchfile = librsync.PatchedFile(rp_basis.open("rb"), deltafile)
-    if outrp:
-        return outrp.write_from_fileobj(patchfile)
-    else:
-        return write_via_tempfile(patchfile, rp_basis)
 
-
-def copy_local(rpin, rpout, rpnew=None):
-    """Write rpnew == rpin using rpout as basis.  rpout and rpnew local"""
-    assert rpout.conn is Globals.local_connection
-    deltafile = rpin.conn.librsync.DeltaFile(
-        get_signature(rpout), rpin.open("rb"))
-    patched_file = librsync.PatchedFile(rpout.open("rb"), deltafile)
-
-    if rpnew:
-        rpnew.write_from_fileobj(patched_file)
-    else:
-        write_via_tempfile(patched_file, rpout)

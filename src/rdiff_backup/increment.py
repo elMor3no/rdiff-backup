@@ -33,20 +33,6 @@ def Increment(new, mirror, incpref):
 	file to incpref.
 
 	"""
-    log.Log("Incrementing mirror file %s" % mirror.get_safepath(), 5)
-    if ((new and new.isdir()) or mirror.isdir()) and not incpref.lstat():
-        incpref.mkdir()
-
-    if not mirror.lstat():
-        incrp = makemissing(incpref)
-    elif mirror.isdir():
-        incrp = makedir(mirror, incpref)
-    elif new.isreg() and mirror.isreg():
-        incrp = makediff(new, mirror, incpref)
-    else:
-        incrp = makesnapshot(mirror, incpref)
-    statistics.process_increment(incrp)
-    return incrp
 
 
 def makemissing(incpref):
@@ -63,54 +49,9 @@ def iscompressed(mirror):
 
 
 def makesnapshot(mirror, incpref):
-    """Copy mirror to incfile, since new is quite different"""
-    compress = iscompressed(mirror)
-    if compress and mirror.isreg():
-        snapshotrp = get_inc(incpref, b"snapshot.gz")
-    else:
-        snapshotrp = get_inc(incpref, b"snapshot")
-
-    if mirror.isspecial():  # check for errors when creating special increments
-        eh = robust.get_error_handler("SpecialFileError")
-        if robust.check_common_error(eh, rpath.copy_with_attribs,
-                                     (mirror, snapshotrp, compress)) == 0:
-            snapshotrp.setdata()
-            if snapshotrp.lstat():
-                snapshotrp.delete()
-            snapshotrp.touch()
-    else:
-        rpath.copy_with_attribs(mirror, snapshotrp, compress)
-    return snapshotrp
 
 
 def makediff(new, mirror, incpref):
-    """Make incfile which is a diff new -> mirror"""
-    compress = iscompressed(mirror)
-    if compress:
-        diff = get_inc(incpref, b"diff.gz")
-    else:
-        diff = get_inc(incpref, b"diff")
-
-    old_new_perms, old_mirror_perms = (None, None)
-
-    if Globals.process_uid != 0:
-        # Check for unreadable files
-        if not new.readable():
-            old_new_perms = new.getperms()
-            new.chmod(0o400 | old_new_perms)
-        if not mirror.readable():
-            old_mirror_perms = mirror.getperms()
-            mirror.chmod(0o400 | old_mirror_perms)
-
-    Rdiff.write_delta(new, mirror, diff, compress)
-
-    if old_new_perms:
-        new.chmod(old_new_perms)
-    if old_mirror_perms:
-        mirror.chmod(old_mirror_perms)
-
-    rpath.copy_attribs_inc(mirror, diff)
-    return diff
 
 
 def makedir(mirrordir, incpref):
@@ -128,14 +69,4 @@ def get_inc(rp, typestr, time=None):
 	whole filename is in the base (which is not quoted).
 
 	"""
-    if time is None:
-        time = Time.prevtime
-    addtostr = lambda s: b'.'.join(map(os.fsencode,(s, Time.timetostring(time), typestr)))
-    if rp.index:
-        incrp = rp.__class__(rp.conn, rp.base,
-                             rp.index[:-1] + (addtostr(rp.index[-1]), ))
-    else:
-        dirname, basename = rp.dirsplit()
-        incrp = rp.__class__(rp.conn, dirname, (addtostr(basename), ))
-    assert not incrp.lstat(), incrp
-    return incrp
+

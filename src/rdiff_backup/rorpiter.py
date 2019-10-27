@@ -27,10 +27,7 @@ files), where files is the number of files attached (usually 1 or
 
 """
 
-import os
-import tempfile
-import collections
-import types
+
 from . import Globals, rpath, iterfile, log
 
 
@@ -42,45 +39,6 @@ def CollateIterators(*rorp_iters):
 	index.  If one or the other lacks that index, it will be None
 
 	"""
-    # overflow[i] means that iter[i] has been exhausted
-    # rorps[i] is None means that it is time to replenish it.
-    iter_num = len(rorp_iters)
-    if iter_num == 2:
-        return Collate2Iters(rorp_iters[0], rorp_iters[1])
-    overflow = [None] * iter_num
-    rorps = overflow[:]
-
-    def setrorps(overflow, rorps):
-        """Set the overflow and rorps list"""
-        for i in range(iter_num):
-            if not overflow[i] and rorps[i] is None:
-                try:
-                    rorps[i] = next(rorp_iters[i])
-                except StopIteration:
-                    overflow[i] = 1
-                    rorps[i] = None
-
-    def getleastindex(rorps):
-        """Return the first index in rorps, assuming rorps isn't empty"""
-        return min([rorp.index for rorp in [x for x in rorps if x]])
-
-    def yield_tuples(iter_num, overflow, rorps):
-        while 1:
-            setrorps(overflow, rorps)
-            if not None in overflow:
-                break
-
-            index = getleastindex(rorps)
-            yieldval = []
-            for i in range(iter_num):
-                if rorps[i] and rorps[i].index == index:
-                    yieldval.append(rorps[i])
-                    rorps[i] = None
-                else:
-                    yieldval.append(None)
-            yield IndexedTuple(index, yieldval)
-
-    return yield_tuples(iter_num, overflow, rorps)
 
 
 def Collate2Iters(riter1, riter2):
@@ -91,38 +49,7 @@ def Collate2Iters(riter1, riter2):
 	important here.
 
 	"""
-    relem1, relem2 = None, None
-    while 1:
-        if not relem1:
-            try:
-                relem1 = next(riter1)
-            except StopIteration:
-                if relem2:
-                    yield (None, relem2)
-                for relem2 in riter2:
-                    yield (None, relem2)
-                break
-            index1 = relem1.index
-        if not relem2:
-            try:
-                relem2 = next(riter2)
-            except StopIteration:
-                if relem1:
-                    yield (relem1, None)
-                for relem1 in riter1:
-                    yield (relem1, None)
-                break
-            index2 = relem2.index
 
-        if index1 < index2:
-            yield (relem1, None)
-            relem1 = None
-        elif index1 == index2:
-            yield (relem1, relem2)
-            relem1, relem2 = None, None
-        else:  # index2 is less
-            yield (None, relem2)
-            relem2 = None
 
 
 class IndexedTuple(collections.UserList):
@@ -133,51 +60,6 @@ class IndexedTuple(collections.UserList):
 
 	"""
 
-    def __init__(self, index, sequence):
-        self.index = index
-        self.data = tuple(sequence)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, key):
-        """This only works for numerical keys (easier this way)"""
-        return self.data[key]
-
-    def __lt__(self, other):
-        return self.__cmp__(other) == -1
-
-    def __le__(self, other):
-        return self.__cmp__(other) != 1
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __gt__(self, other):
-        return self.__cmp__(other) == 1
-
-    def __ge__(self, other):
-        return self.__cmp__(other) != -1
-
-    def __cmp__(self, other):
-        assert isinstance(other, IndexedTuple)
-        if self.index < other.index:
-            return -1
-        elif self.index == other.index:
-            return 0
-        else:
-            return 1
-
-    def __eq__(self, other):
-        if isinstance(other, IndexedTuple):
-            return self.index == other.index and self.data == other.data
-        elif type(other) is tuple:
-            return self.data == other
-        else:
-            return None
-
-    def __str__(self):
-        return "(%s).%s" % (", ".join(map(str, self.data)), self.index)
 
 
 def FillInIter(rpiter, rootrp):
@@ -250,40 +132,7 @@ class IterTreeReducer:
 		otherwise.
 
 		"""
-        branches = self.branches
-        while 1:
-            to_be_finished = branches[-1]
-            base_index = to_be_finished.base_index
-            if base_index != index[:len(base_index)]:
-                # out of the tree, finish with to_be_finished
-                to_be_finished.end_process()
-                del branches[-1]
-                if not branches:
-                    return None
-                branches[-1].branch_process(to_be_finished)
-            else:
-                return 1
 
-    def add_branch(self, index):
-        """Return branch of type self.branch_class, add to branch list"""
-        branch = self.branch_class(*self.branch_args)
-        branch.base_index = index
-        self.branches.append(branch)
-        return branch
-
-    def Finish(self):
-        """Call at end of sequence to tie everything up"""
-        if self.index is None or self.root_fast_processed:
-            return
-        while 1:
-            to_be_finished = self.branches.pop()
-            to_be_finished.end_process()
-            if not self.branches:
-                break
-            self.branches[-1].branch_process(to_be_finished)
-
-    def __call__(self, *args):
-        """Process args, where args[0] is current position in iterator
 
 		Returns true if args successfully processed, false if index is
 		not in the current tree and thus the final result is

@@ -74,11 +74,4 @@ def compute_sha1(rp, compressed=0):
     return digest
 
 
-def compute_sha1_fp(fp, compressed=0):
-    """Return hex sha1 hash of given file-like object"""
-    blocksize = Globals.blocksize
-    fw = FileWrapper(fp)
-    while 1:
-        if not fw.read(blocksize):
-            break
-    return fw.close().sha1_digest
+
